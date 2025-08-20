@@ -67,3 +67,13 @@ export interface ObligationData {
   categorie: string | null;
   valeurTransige: number | null;
 }
+
+export interface ActionAutoComplete {
+  id: number;
+  designationEmetteur: string;
+}
+
+export interface ObligationAutoComplete {
+  id: number;
+  designationTitre: string;
+}

@@ -1,6 +1,6 @@
 import axios, { Axios, type AxiosResponse } from 'axios';
 
-import type { ActionData, ObligationData } from '../types/options';
+import type { ActionData, ObligationData, ActionAutoComplete, ObligationAutoComplete } from '../types/options';
 
 const API_BASE_URL = import.meta.env.VITE_APP_URL_BACKEND_API;
 
@@ -57,4 +57,12 @@ export const getObligationFilter = ( filters: string[] = [], searchTerm: string 
    const fullUrl = `${API_BASE_URL}bulletin/obligation${queryString}`;
    console.log('Requête API Obligations envoyée :', fullUrl);
   return axios.get(fullUrl);
+}
+
+export const getActionAutoComplete = (searchTerm: string = ''): Promise<AxiosResponse<ActionAutoComplete[]>> => {
+  return axios.get(`${API_BASE_URL}bulletin/action/autocompletion?search=${searchTerm}`);
+}
+
+export const getObligationAutoComplete = (searchTerm: string = ''): Promise<AxiosResponse<ObligationAutoComplete[]>> => {
+  return axios.get(`${API_BASE_URL}bulletin/obligation/autocompletion?search=${searchTerm}`);
 }

@@ -1,18 +1,36 @@
 <template>
 <div class="graph-section mt-6 ml-6" ref="graphSection">
           <h3 class="mt-5">GRAPHIQUES</h3>
+         
+          <!-- champs auto complete -->
+          <div class="relative w-150">
+            <div class="flex items-center gap-4">
+            <select v-model="changeValue" @change="getValue" class="search-input px-1 py- border solid rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+              <option value="">select filter</option>
+              <option value="action">Marché des Actions</option>
+              <option value="obligation">Marché des Obligations</option>
+            </select>
 
-          <input
-            type="text"
-            v-model="searchTerm"
-            placeholder="Rechercher..."
-            class="search-input px-1 py- border solid rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent  mt-4"
-          />
-            <select v-model="changeValue" @change="getValue" class=" ml-9 search-input px-1 py- border solid rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-            <option value="">select filter</option>
-            <option value="action">Marché des Actions</option>
-            <option value="obligation">Marché des Obligations</option>
-          </select>
+            <div class="relative w-200">
+              <input
+                type="text"
+                v-model="searchTerm"
+                placeholder="Rechercher..."
+                @input="fetchResults"
+                class="search-input px-1 py- border solid rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full"
+              />
+              <ul v-if="results.length > 0" class="autocomplete-list absolute top-full left-0 z-10 bg-white border border-gray-300 rounded-lg shadow-lg w-full max-h-[200px] overflow-y-auto">
+                <li v-for="result in results" :key="result.id" @click="selectResult(result)" class="autocomplete-item px-4 py-2 hover:bg-gray-100 cursor-pointer">
+                  {{ result.display }}
+                </li>
+              </ul>
+             
+            </div>
+           
+          </div>
+          <p v-if="selectedCountry" class="text-center mt-3 ml-2 w-full">Pays sélectionné : {{ selectedCountry.designationTitre ||   selectedCountry.designationEmetteur }}</p>
+          </div>
+         
           <div
             class="graph-header flex items-center justify-between p-4 bg-gray-100 rounded-lg shadow-sm mb-4"
           >
@@ -35,30 +53,33 @@
             </div>
 
             <!-- Bouton "Plus d'options" avec menu déroulant -->
-            <div class="relative">
-              <button
-                @click="showMoreOptionsDropdown = !showMoreOptionsDropdown"
-                class="more-options px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-              >
-                Plus d'options
-              </button>
-              <div
-                v-if="showMoreOptionsDropdown"
-                class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-20 max-h-[200px] overflow-y-auto"
-              >
-                <a
-                  v-for="field in availableMoreOptions"
-                  :key="field.key"
-                  @click="toggleColumnDisplay(field.key)"
-                  class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+             <!-- ces boutons ne sont pas sur la meme ligne que les autres boutons -->
+            <div class="flex items-center">
+              <div class="relative ml-auto">
+                <button
+                  @click="showMoreOptionsDropdown = !showMoreOptionsDropdown"
+                  class="more-options px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                 >
-                  {{ field.label }}
-                </a>
+                  Options
+                </button>
                 <div
-                  v-if="availableMoreOptions.length === 0"
-                  class="px-4 py-2 text-sm text-gray-500"
+                  v-if="showMoreOptionsDropdown"
+                  class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-20 max-h-[200px] overflow-y-auto"
                 >
-                  Toutes les options sont affichées.
+                  <a
+                    v-for="field in availableMoreOptions"
+                    :key="field.key"
+                    @click="toggleColumnDisplay(field.key)"
+                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+                  >
+                    {{ field.label }}
+                  </a>
+                  <div
+                    v-if="availableMoreOptions.length === 0"
+                    class="px-4 py-2 text-sm text-gray-500"
+                  >
+                    Toutes les options sont affichées.
+                  </div>
                 </div>
               </div>
             </div>
@@ -87,13 +108,14 @@
           <!-- <div v-else-if=" !isLoading && statisticsObligations && !error && statisticsObligations.length === 0" class="mt-8 p-6 text-center text-gray-600">
             Aucune donnée disponible pour le graphique.
           </div> -->
-    </div>
-  </template>
+  </div>
+</template>
 
 <script setup lang="ts">
 
 import { getObligationFilter } from "../../services/api";
 import { getActionDataFilter } from "../../services/api";
+import { getActionAutoComplete, getObligationAutoComplete } from "../../services/api";
 import { ref, onMounted, computed, watch, defineEmits } from "vue";
 
 
@@ -117,16 +139,61 @@ onMounted(() => {
   getValue();
 });
 
-let searchTimeout: ReturnType<typeof setTimeout> | null = null; // Pour le débouncing
-watch(searchTerm, (newSearchTerm) => {
+const results = ref<any[]>([]);
+const selectedCountry = ref<any>(null);
+const isFetchingSuggestions = ref(false);
+let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+const fetchResults = () => {
+
+  
   if (searchTimeout) {
     clearTimeout(searchTimeout);
   }
-  searchTimeout = setTimeout(() => {
-    // Appelle loadObligationData avec les filtres actuels et le nouveau terme de recherche
-    // loadObligationData(selectedFilterFields.value, newSearchTerm);
-  }, 500); // Débouncing de 500ms
-});
+  searchTimeout = setTimeout(async () => {
+    if (!searchTerm.value.trim()) {
+      results.value = [];
+      return;
+    }
+
+    isFetchingSuggestions.value = true;
+    try {
+      let response;
+      if (changeValue.value === 'action') {
+        response = await getActionAutoComplete(searchTerm.value);
+
+        
+      } else if (changeValue.value === 'obligation') {
+        response = await getObligationAutoComplete(searchTerm.value);
+        console.log('obligation ==>  ' ,JSON.stringify(response))
+      }
+      
+      if (response && response.data) {
+            results.value = response.data.map((item: any) => ({
+              id: item.id,
+              original: item, // Keep the original object
+              display: changeValue.value === 'action' ? item.designationEmetteur : item.designationTitre
+            }));
+          } else {
+            results.value = [];
+          }
+
+      console.log('testete===> ' +results.value);
+
+    } catch (err) {
+      console.error("Error fetching autocomplete results:", err);
+      results.value = [];
+    } finally {
+      isFetchingSuggestions.value = false;
+    }
+  }, 300); // 300ms debounce
+};
+
+const selectResult = (result: any) => {
+  searchTerm.value = result.display; // Use the consistent display property
+  selectedCountry.value = result.original; // Store the original object
+  results.value = [];
+};
 
 const allActionFields = [
  // --- Champs de Volume et Valeur ---
@@ -224,7 +291,6 @@ const toggleColumnDisplay = (fieldKey: string) => {
         graphObligations.value = response.data;
       }
 
-      console.log(JSON.stringify(graphObligations));
       isLoading.value = false;
     } else {
       // Aucun champ sélectionné, on peut vider les données si besoin
